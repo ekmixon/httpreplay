@@ -50,11 +50,10 @@ class PcapTest(object):
 
         key, exception = reader.exceptions.popitem()
 
-        output = [
+        return [
             exception["exception"],
-            os.path.basename(os.path.normpath(exception["trace"][-1][0]))
+            os.path.basename(os.path.normpath(exception["trace"][-1][0])),
         ]
-        return output
 
     def test_pcap(self):
         if self.pcapdata is None:

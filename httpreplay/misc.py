@@ -12,10 +12,9 @@ tlsmaster = "RSA Session-ID:(?P<sid>[0-9a-f]+) Master-Key:(?P<key>[0-9a-f]+)"
 def read_tlsmaster(filepath):
     ret = {}
     for line in open(filepath, "rb"):
-        x = re.match(tlsmaster, line)
-        if x:
-            sid = x.group("sid").strip()
-            key = x.group("key").strip()
+        if x := re.match(tlsmaster, line):
+            sid = x["sid"].strip()
+            key = x["key"].strip()
             try:
                 # In case a malformed session or key is read. Handles the
                 # odd-length string error.
@@ -67,8 +66,7 @@ class JA3(object):
 
     @staticmethod
     def _handle_server_hello(handshake):
-        ja3 = [str(handshake.version)]
-        ja3.append(str(handshake.cipher_suite))
+        ja3 = [str(handshake.version), str(handshake.cipher_suite)]
         ja3 += JA3._process_extensions_server(handshake)
         return ja3
 
@@ -84,13 +82,8 @@ class JA3(object):
             # Needed to preserve commas on the join
             return [""]
 
-        exts = list()
-        for ext_val, ext_data in server_handshake.extensions:
-            exts.append(ext_val)
-
-        results = list()
-        results.append("-".join([str(x) for x in exts]))
-        return results
+        exts = [ext_val for ext_val, ext_data in server_handshake.extensions]
+        return ["-".join([str(x) for x in exts])]
 
     @staticmethod
     def _process_extensions(client_handshake):
@@ -104,7 +97,7 @@ class JA3(object):
             # Needed to preserve commas on the join
             return ["", "", ""]
 
-        exts = list()
+        exts = []
         elliptic_curve = ""
         elliptic_curve_point_format = ""
         for ext_val, ext_data in client_handshake.extensions:
@@ -121,11 +114,11 @@ class JA3(object):
             else:
                 continue
 
-        results = list()
-        results.append("-".join([str(x) for x in exts]))
-        results.append(elliptic_curve)
-        results.append(elliptic_curve_point_format)
-        return results
+        return [
+            "-".join([str(x) for x in exts]),
+            elliptic_curve,
+            elliptic_curve_point_format,
+        ]
 
     @staticmethod
     def _ntoh(buf):
@@ -173,7 +166,7 @@ class JA3(object):
         :type element_width: int
         :returns: str
         """
-        int_vals = list()
+        int_vals = []
         data = bytearray(data)
         if len(data) % element_width:
             message = '{count} is not a multiple of {width}'

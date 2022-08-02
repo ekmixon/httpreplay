@@ -24,13 +24,11 @@ def _read_chunked(rfile):
         line = rfile.readline(128)
         if line == b"":
             raise dpkt.NeedData("premature end of chunked body")
-        if line != b"\r\n" and line != b"\n":
+        if line not in [b"\r\n", b"\n"]:
             try:
                 length = int(line, 16)
             except ValueError:
-                raise dpkt.UnpackError(
-                    "Invalid chunked encoding length: %s" % line
-                )
+                raise dpkt.UnpackError(f"Invalid chunked encoding length: {line}")
             chunk = rfile.read(length)
             suffix = rfile.readline(5)
             if suffix != b"\r\n":
@@ -44,23 +42,18 @@ def parse_body(f, headers):
     This is a modified version of dpkt.http.parse_body() which tolerates cut
     off HTTP bodies."""
     if headers.get("transfer-encoding", "").lower() == "chunked":
-        body = "".join(_read_chunked(f))
+        return "".join(_read_chunked(f))
     elif "content-length" in headers:
         cl = headers["content-length"]
-        if isinstance(cl, list):
-            n = int(cl[-1])
-        else:
-            n = int(cl)
-        body = f.read(n)
-        # TODO Report a warning if we couldn't read the entire body (but don't
-        # raise an exception as dpkt.http would do).
+        n = int(cl[-1]) if isinstance(cl, list) else int(cl)
+        return f.read(n)
+            # TODO Report a warning if we couldn't read the entire body (but don't
+            # raise an exception as dpkt.http would do).
     elif "content-type" in headers:
-        body = f.read()
+        return f.read()
     else:
         # XXX - need to handle HTTP/0.9
-        body = ""
-
-    return body
+        return ""
 
 # We override the standard dpkt.http.parse_body() method with one that
 # tolerates cut off HTTP bodies slightly better.
@@ -164,22 +157,19 @@ class HttpProtocol(Protocol):
         return _Response(recv)
 
     def handle(self, s, ts, protocol, sent, recv, tlsinfo=None):
-        if protocol != "tcp" and protocol != "tls":
+        if protocol not in ["tcp", "tls"]:
             self.parent.handle(s, ts, protocol, sent, recv, tlsinfo)
             return
 
-        req = None
-        if sent:
-            req = self.parse_request(ts, sent)
-
-        protocols = {
-            "tcp": "http",
-            "tls": "https",
-        }
-
+        req = self.parse_request(ts, sent) if sent else None
         # Only try to decode the HTTP response if the request was valid HTTP.
         if req:
             res = self.parse_response(ts, recv)
+
+            protocols = {
+                "tcp": "http",
+                "tls": "https",
+            }
 
             # Report this stream as being a valid HTTP stream.
             self.parent.handle(
@@ -374,11 +364,7 @@ class SmtpProtocol(Protocol):
         """
         self.request.raw.append(request)
 
-        if self.command != "data":
-            data = request.split(None)
-        else:
-            data = request
-
+        data = request.split(None) if self.command != "data" else request
         if not data:
             return
 

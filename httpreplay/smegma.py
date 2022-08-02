@@ -33,7 +33,7 @@ class TLSInfo(object):
         self.server_hello = server_hello
 
     def __repr__(self):
-        return "<JA3=%s, JA3S=%s>" % (self.JA3, self.JA3S)
+        return f"<JA3={self.JA3}, JA3S={self.JA3S}>"
 
 class TCPPacketStreamer(Protocol):
     """Translates TCP/IP packet streams into rich streams of stitched
@@ -295,7 +295,7 @@ class TCPStream(Protocol):
         if not tcp.data:
             return
 
-        if tcp.data and to_server and self.recv:
+        if to_server and self.recv:
             self.parent.handle(
                 self.s, self.ts, "tcp", "".join(self.sent), "".join(self.recv),
                 None
@@ -565,48 +565,49 @@ class TLSStream(Protocol):
         return True
 
     def state_stream(self, s, ts):
-        if self.sent and self.recv:
-            sent = []
-            while self.sent:
-                record = self.sent.pop(0)
-                sent.append(self.tls.decrypt_client(record.type, record.data))
+        if not self.sent or not self.recv:
+            return
+        sent = []
+        while self.sent:
+            record = self.sent.pop(0)
+            sent.append(self.tls.decrypt_client(record.type, record.data))
 
-            recv = []
-            while self.recv:
-                record = self.recv.pop(0)
-
-                try:
-                    recv.append(
-                        self.tls.decrypt_server(record.type, record.data)
-                    )
-                except tlslite.errors.TLSProtocolException:
-                    log.info(
-                        "Error decrypting TLS content, perhaps something "
-                        "went wrong during the process of stitching packets "
-                        "back together in the right order (timestamp %f).",
-                        ts,
-                    )
-
-            ja3, ja3s, ja3_p, ja3s_p = None, None, None, None
-            try:
-                ja3, ja3_p = JA3.JA3(self.client_hello.data)
-            except ValueError as e:
-                log.warning("Failed to calculate JA3: %s", e)
+        recv = []
+        while self.recv:
+            record = self.recv.pop(0)
 
             try:
-                ja3s, ja3s_p = JA3.JA3S(self.server_hello.data)
-            except ValueError as e:
-                log.warning("Failed to calculate JA3S: %s", e)
+                recv.append(
+                    self.tls.decrypt_server(record.type, record.data)
+                )
+            except tlslite.errors.TLSProtocolException:
+                log.info(
+                    "Error decrypting TLS content, perhaps something "
+                    "went wrong during the process of stitching packets "
+                    "back together in the right order (timestamp %f).",
+                    ts,
+                )
 
-            tlsinfo = TLSInfo(
-                JA3=ja3, JA3S=ja3s, JA3_params=ja3_p, JA3S_params=ja3s_p,
-                client_hello=self.client_hello, server_hello=self.server_hello
-            )
+        ja3, ja3s, ja3_p, ja3s_p = None, None, None, None
+        try:
+            ja3, ja3_p = JA3.JA3(self.client_hello.data)
+        except ValueError as e:
+            log.warning("Failed to calculate JA3: %s", e)
 
-            self.parent.handle(
-                s, ts, "tls", "".join(sent), "".join(recv), tlsinfo
-            )
-            return True
+        try:
+            ja3s, ja3s_p = JA3.JA3S(self.server_hello.data)
+        except ValueError as e:
+            log.warning("Failed to calculate JA3S: %s", e)
+
+        tlsinfo = TLSInfo(
+            JA3=ja3, JA3S=ja3s, JA3_params=ja3_p, JA3S_params=ja3s_p,
+            client_hello=self.client_hello, server_hello=self.server_hello
+        )
+
+        self.parent.handle(
+            s, ts, "tls", "".join(sent), "".join(recv), tlsinfo
+        )
+        return True
 
     def state_done(self, s, ts):
         while self.sent:

@@ -27,11 +27,7 @@ def pcap2mitm(pcapfile, mitmfile, tlsmaster=None, stream=False):
         )
         return False
 
-    if tlsmaster:
-        tlsmaster = read_tlsmaster(tlsmaster)
-    else:
-        tlsmaster = {}
-
+    tlsmaster = read_tlsmaster(tlsmaster) if tlsmaster else {}
     handlers = {
         443: lambda: https_handler(tlsmaster),
         4443: lambda: https_handler(tlsmaster),
